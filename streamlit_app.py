@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+
+pg=st.navigation([st.Page("./src/main.py",title="Neurogrnic Case Generator")])
+st.set_page_config(page_title="Case generator bot",)
+pg.run()
