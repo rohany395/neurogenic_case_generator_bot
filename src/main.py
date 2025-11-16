@@ -156,6 +156,10 @@ pending_input = queued_input or user_input
 if pending_input and live_user_placeholder and live_assistant_placeholder:
     st.session_state.messages.append({"role": "user", "content": pending_input})
     live_user_placeholder.markdown(render_user_message(pending_input), unsafe_allow_html=True)
+    normalized_input = pending_input.lower()
+    is_initial_assessment = "initial assessment" in normalized_input
+    transfer_keywords = ["transfer", "new setting", "transition", "new facility", "new clinic","discharge to"]
+    is_transfer_initial = is_initial_assessment and any(keyword in normalized_input for keyword in transfer_keywords)
     
     # Create system prompt based on settings
     difficulty_map = {
@@ -163,6 +167,21 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
         "Intermediate (Graduate)": "intermediate",
         "Advanced (Clinical Fellows)": "advanced"
     }
+    guiding_focus = "Focus these questions on determining initial assessment priorities and selecting appropriate standardized and informal tools." if is_initial_assessment else "Use these questions to spark discussion about differential diagnosis, intervention planning, and clinical reasoning."
+    if is_initial_assessment and not is_transfer_initial:
+        language_sample_note = "Ensure the language sample reflects spontaneous speech observable prior to formal testing."
+    else:
+        language_sample_note = ""
+    initial_assessment_guidance = ""
+    if is_initial_assessment:
+        if is_transfer_initial:
+            initial_assessment_guidance = (
+                "\nWhen the user signals an initial assessment during a transfer of care, summarize what prior SLPs accomplished, the patient's recovery trajectory, and documentation the new setting would inherit. Highlight unanswered assessment questions for the new site and clarify what still requires standardized and informal testing."
+            )
+        else:
+            initial_assessment_guidance = (
+                "\nWhen the user signals an initial assessment for a new onset with no prior SLP involvement, limit the case to referral information, medical history, observable behaviors, and collateral reports available before assessments are administered. Do not invent completed SLP assessment results yet; instead, describe what needs to be investigated and why."
+            )
     
     system_prompt = f"""You are an expert clinical educator specializing in speech-language pathology. Your role is to help university instructors create high-quality, realistic case studies for their students.
 
@@ -175,10 +194,10 @@ Always craft a single cohesive narrative case study (paragraph style, not bullet
 - Treatment recommendations, prognosis.
 
 After the narrative, append two explicit sections:
-1. Language Sample — provide a short quoted transcript (4–6 sentences) that captures the client's spontaneous speech. Match the cadence of this reference format: "Well the, uh, the little… the little cookers are spinning up there and she’s trying to wash the plates but the water’s all, all floofing out. And the boy, he’s, he’s grabbing the stool cause he wants the cookie. They’re having a good time, I think, and the mother doesn’t know the window is, is, uh, smiling. It’s pretty noisy in that room." Use it only as stylistic guidance; compose a fresh sample aligned with the case’s disorder-specific features every time so it reflects the symptoms described in the user input.
-2. Guiding Questions — provide {"discussion" if include_assessment else "reflection"} questions instructors can use in class.
+1. Language Sample — provide a short quoted transcript (4–6 sentences) that captures the client's spontaneous speech. Match the cadence of this reference format: "Well the, uh, the little… the little cookers are spinning up there and she’s trying to wash the plates but the water’s all, all floofing out. And the boy, he’s, he’s grabbing the stool cause he wants the cookie. They’re having a good time, I think, and the mother doesn’t know the window is, is, uh, smiling. It’s pretty noisy in that room." Use it only as stylistic guidance; compose a fresh sample aligned with the case’s disorder-specific features every time so it reflects the symptoms described in the user input. {language_sample_note}
+2. Guiding Questions — provide {"discussion" if include_assessment else "reflection"} questions instructors can use in class. {guiding_focus}
 
-Keep the entire response focused on the case (no general tips). Adjust complexity to {difficulty_map[difficulty]} level, ensure clinical accuracy, and use professional terminology appropriate for graduate-level speech-language pathology education."""
+Keep the entire response focused on the case (no general tips). Adjust complexity to {difficulty_map[difficulty]} level, ensure clinical accuracy, and use professional terminology appropriate for graduate-level speech-language pathology education.{initial_assessment_guidance}"""
     
     # Prepare messages for API
     api_messages = [{"role": "system", "content": system_prompt}] + [
