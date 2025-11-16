@@ -72,9 +72,6 @@ with st.sidebar:
     
     quick_prompts = [
         "Create a case study for Broca's aphasia",
-        "Generate a dysarthria case for undergraduates",
-        "Create a pediatric apraxia case study",
-        "Generate a complex fluency disorder case"
     ]
     
     for prompt in quick_prompts:
@@ -169,18 +166,19 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
     
     system_prompt = f"""You are an expert clinical educator specializing in speech-language pathology and communication disorders. Your role is to help university instructors create high-quality, realistic case studies for their students.
 
-When generating case studies, include:
+Always craft a single cohesive narrative case study (paragraph style, not bullet points) that weaves together:
 - Patient demographics and background
 - Detailed medical history and etiology
 - Presenting symptoms and characteristics
-- Assessment results (formal and informal)
-- Clinical observations
-- Differential diagnosis considerations
-- Treatment recommendations
-- Prognosis and goals
-{"- Discussion questions and learning objectives for students" if include_assessment else ""}
+- Assessment results (formal and informal) with interpretation
+- Clinical observations and differential diagnosis considerations
+- Treatment recommendations, prognosis, and instructional goals
 
-Adjust complexity to {difficulty_map[difficulty]} level. Make cases realistic, clinically accurate, and pedagogically valuable. Use professional terminology appropriate for graduate-level students in speech-language pathology."""
+After the narrative, append two explicit sections:
+1. Language Profile — summarize expressive/receptive abilities, pragmatics, cognition, literacy in a concise table or bullet list.
+2. Guiding Questions — provide {"discussion" if include_assessment else "reflection"} questions instructors can use in class.
+
+Keep the entire response focused on the case (no general tips). Adjust complexity to {difficulty_map[difficulty]} level, ensure clinical accuracy, and use professional terminology appropriate for graduate-level speech-language pathology education."""
     
     # Prepare messages for API
     api_messages = [{"role": "system", "content": system_prompt}] + [
