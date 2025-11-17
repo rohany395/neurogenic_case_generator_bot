@@ -1,7 +1,5 @@
 streamlit>=1.18.0
 openai>=1.0.0
-PyPDF2>=3.0.0
 python-docx>=0.8.11
 anthropic
 google-generativeai
-fpdf2>=2.7.9
