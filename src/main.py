@@ -32,6 +32,7 @@ def normalize_text_for_pdf(text: str) -> str:
         "–": "-",
         "—": "-",
         "•": "-",
+        "…": "...",
     }
     normalized = text
     for src, dst in replacements.items():
