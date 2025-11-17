@@ -177,7 +177,7 @@ st.markdown("""
         font-size: 2.5rem;
         font-weight: bold;
         color: #4F46E5;
-        margin-bottom: 0.5rem;
+        text-align: center;
     }
     .sub-header {
         font-size: 1rem;
@@ -301,7 +301,14 @@ with st.sidebar:
 
 # Main content
 st.markdown('<div class="main-header">📚 Clinical Case Study Generator</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">AI-powered case studies for Speech-Language Pathology education</div>', unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style='text-align: center; color: #6B7280; padding: 0;'>
+        <p>An AI-powered educational case study generator for neurogenic communication disorders</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 live_user_placeholder = None
 live_assistant_placeholder = None
@@ -474,14 +481,3 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         st.info("Please check your API configuration and try again.")
-
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: #6B7280; padding: 1rem;'>
-        <p>An AI-powered educational case study generator for neurogenic communication disorders</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
