@@ -66,6 +66,7 @@ def get_latest_assistant_report() -> str:
             return message.get("content", "")
     return ""
 
+
 # Dedicated Language Profile agent helper
 def generate_language_profile_section(
     case_text: str,
@@ -202,6 +203,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+latest_report_text = get_latest_assistant_report()
+pdf_filename = f"clinical_case_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+pdf_bytes = create_pdf_from_report(latest_report_text) if latest_report_text else b""
+
 
 def render_user_message(content: str) -> str:
     return f'<div class="chat-message user-message"><strong>👤 You:</strong><br>{content}</div>'
@@ -226,6 +231,17 @@ if 'language_profile_enabled' not in st.session_state:
 
 # Sidebar
 with st.sidebar:
+    st.markdown("### 📄 Report Export")
+    st.download_button(
+        "⬇️ Download latest report (PDF)",
+        data=pdf_bytes,
+        file_name=pdf_filename,
+        mime="application/pdf",
+        use_container_width=True,
+        disabled=not bool(pdf_bytes)
+    )
+    st.markdown("---")
+
     st.markdown("### 📖 Quick Prompts")
     
     quick_prompts = [
@@ -298,18 +314,6 @@ with conversation_container:
             st.markdown(render_assistant_message(message["content"]), unsafe_allow_html=True)
     live_user_placeholder = st.empty()
     live_assistant_placeholder = st.empty()
-
-# Offer latest report as PDF when available
-latest_report_text = get_latest_assistant_report()
-pdf_data = create_pdf_from_report(latest_report_text) if latest_report_text else b""
-st.download_button(
-    "⬇️ Download latest report (PDF)",
-    data=pdf_data,
-    file_name=f"clinical_case_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-    mime="application/pdf",
-    use_container_width=True,
-    disabled=not bool(latest_report_text)
-)
 
 # Chat input (process queued quick prompts before showing input box)
 queued_input = st.session_state.pop("pending_user_input", None)
