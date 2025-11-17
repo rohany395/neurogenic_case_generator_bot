@@ -99,12 +99,9 @@ except KeyError:
 
 # Initialize session state
 if 'messages' not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "Welcome to the Clinical Case Study Generator! I specialize in creating detailed case studies for speech-language pathology conditions like aphasia, dysarthria, apraxia, and more. How can I help you create educational materials for your students today?"
-        }
-    ]
+    st.session_state.messages = []
+if 'rtss_enabled' not in st.session_state:
+    st.session_state.rtss_enabled = False
 
 # Sidebar
 with st.sidebar:
@@ -147,17 +144,17 @@ with st.sidebar:
         step=0.1,
         help="Higher values make output more creative, lower values more focused"
     )
+    st.session_state.rtss_enabled = st.checkbox(
+        "Generate RTSS section",
+        value=st.session_state.get("rtss_enabled", False),
+        help="Check to append a Rehabilitation Treatment Specification System plan after each case."
+    )
     
     st.markdown("---")
     
     # Clear conversation button
     if st.button("🗑️ Clear Conversation", use_container_width=True):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "Conversation cleared! How can I help you create a new case study?"
-            }
-        ]
+        st.session_state.messages = []
         st.rerun()
     
     st.markdown("---")
@@ -190,6 +187,8 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
     is_initial_assessment = "initial assessment" in normalized_input
     transfer_keywords = ["transfer", "new setting", "transition", "new facility", "new clinic","discharge to"]
     is_transfer_initial = is_initial_assessment and any(keyword in normalized_input for keyword in transfer_keywords)
+    rtss_keywords = ["rtss", "rehabilitation treatment specification", "treatment specification"]
+    rtss_requested = any(keyword in normalized_input for keyword in rtss_keywords)
     
     # Create system prompt based on settings
     difficulty_map = {
@@ -264,33 +263,34 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                 )
         
         # Generate RTSS section with dedicated agent and append to response
-        try:
-            with st.spinner("Synthesizing RTSS plan..."):
-                base_message = assistant_message
-                def update_rtss(section_partial: str) -> None:
+        if st.session_state.get("rtss_enabled", False) or rtss_requested:
+            try:
+                with st.spinner("Synthesizing RTSS plan..."):
+                    base_message = assistant_message
+                    def update_rtss(section_partial: str) -> None:
+                        live_assistant_placeholder.markdown(
+                            render_assistant_message(
+                                f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{section_partial}"
+                            ),
+                            unsafe_allow_html=True
+                        )
+                    rtss_section = generate_rtss_section(
+                        case_text=base_message,
+                        user_prompt=pending_input,
+                        model=model,
+                        temperature=temperature,
+                        on_chunk=update_rtss
+                    )
+                if rtss_section:
+                    assistant_message = (
+                        f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{rtss_section}"
+                    )
                     live_assistant_placeholder.markdown(
-                        render_assistant_message(
-                            f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{section_partial}"
-                        ),
+                        render_assistant_message(assistant_message),
                         unsafe_allow_html=True
                     )
-                rtss_section = generate_rtss_section(
-                    case_text=base_message,
-                    user_prompt=pending_input,
-                    model=model,
-                    temperature=temperature,
-                    on_chunk=update_rtss
-                )
-            if rtss_section:
-                assistant_message = (
-                    f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{rtss_section}"
-                )
-                live_assistant_placeholder.markdown(
-                    render_assistant_message(assistant_message),
-                    unsafe_allow_html=True
-                )
-        except Exception as rtss_error:
-            st.warning(f"RTSS agent skipped due to error: {rtss_error}")
+            except Exception as rtss_error:
+                st.warning(f"RTSS agent skipped due to error: {rtss_error}")
         
         st.session_state.messages.append({"role": "assistant", "content": assistant_message})
         st.rerun()
