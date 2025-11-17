@@ -2,6 +2,80 @@ import streamlit as st
 import openai
 from datetime import datetime
 
+LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
+LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
+
+
+def strip_language_profile_heading(text: str) -> str:
+    if not text:
+        return ""
+    stripped = text.lstrip()
+    lines = stripped.splitlines()
+    while lines:
+        first_line = lines[0].strip()
+        if LANGUAGE_PROFILE_HEADING_TEXT.lower() in first_line.lower():
+            lines.pop(0)
+            while lines and not lines[0].strip():
+                lines.pop(0)
+        else:
+            break
+    return "\n".join(lines).strip()
+
+# Dedicated Language Profile agent helper
+def generate_language_profile_section(
+    case_text: str,
+    user_prompt: str,
+    model: str,
+    temperature: float,
+    on_chunk=None,
+) -> str:
+    profile_system_prompt = (
+        "You are the Language Profile Agent for a speech-language pathology educator. "
+        "Your only job is to translate a case narrative into a detailed language profile/communication observations summary."
+    )
+    exemplar = (
+        "Language Sample / Communication Observations\n"
+        "Collected through conversational tasks, picture description, narrative generation, and functional exchanges.\n"
+        "Verbal Expression\n"
+        "Fluent, effortless speech with intact prosody.\n"
+        "Frequent semantic paraphasias, circumlocutions, occasional phonemic paraphasias, and occasional neologisms.\n"
+        "Sentences are grammatically intact but often empty in content or tangential.\n"
+        "Awareness of errors is inconsistent; spontaneous repairs are limited.\n"
+        "Auditory Comprehension\n"
+        "Difficulty understanding multi-step directions.\n"
+        "Reduced accuracy for moderately complex yes/no questions.\n"
+        "Difficulty understanding conversational discourse without visual supports or contextual cues.\n"
+        "Repetition\n"
+        "Moderately–severely impaired for multisyllabic words and sentence-level stimuli.\n"
+        "Naming\n"
+        "Moderate impairment in confrontation naming with semantic substitutions and occasional perseveration."
+    )
+    profile_user_prompt = f"""User request: {user_prompt}\n\nCase narrative: {case_text}\n\nProduce a Language Profile / Communication Observations section modeled on the exemplar below. Match the structure (intro plus subsections such as Verbal Expression, Auditory Comprehension, Repetition, Naming, etc.), but tailor every content line to the provided case details. Keep it concise, clinically rich, and coherent with the narrative.\n\nExemplar:\n{exemplar}"""
+    response_stream = openai.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": profile_system_prompt},
+            {"role": "user", "content": profile_user_prompt}
+        ],
+        temperature=min(max(temperature, 0.0), 1.0),
+        max_tokens=800,
+        stream=True
+    )
+    profile_text = ""
+    for chunk in response_stream:
+        delta = chunk.choices[0].delta
+        if not delta:
+            continue
+        delta_content = getattr(delta, "content", None)
+        if delta_content is None and isinstance(delta, dict):
+            delta_content = delta.get("content")
+        if not delta_content:
+            continue
+        profile_text += delta_content
+        if on_chunk:
+            on_chunk(profile_text)
+    return profile_text.strip()
+
 # Dedicated RTSS agent helper
 def generate_rtss_section(
     case_text: str,
@@ -102,6 +176,8 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'rtss_enabled' not in st.session_state:
     st.session_state.rtss_enabled = False
+if 'language_profile_enabled' not in st.session_state:
+    st.session_state.language_profile_enabled = False
 
 # Sidebar
 with st.sidebar:
@@ -121,11 +197,22 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
+    st.markdown("### ➕ Additional Content")
+    st.session_state.language_profile_enabled = st.checkbox(
+        "Generate Language Profile section",
+        value=st.session_state.get("language_profile_enabled", False),
+        help="Check to append a detailed Language Profile / Communication Observations summary modeled on clinical documentation."
+    )
+    st.session_state.rtss_enabled = st.checkbox(
+        "Generate RTSS section",
+        value=st.session_state.get("rtss_enabled", False),
+        help="Check to append a Rehabilitation Treatment Specification System plan after each case."
+    )
+    
+    st.markdown("---")
     st.markdown("### ⚙️ Settings")
     difficulty = "Intermediate (Graduate)"
     include_assessment = True
-    
-    st.markdown("---")
     
     # Model selection
     model = st.selectbox(
@@ -144,14 +231,6 @@ with st.sidebar:
         step=0.1,
         help="Higher values make output more creative, lower values more focused"
     )
-    st.session_state.rtss_enabled = st.checkbox(
-        "Generate RTSS section",
-        value=st.session_state.get("rtss_enabled", False),
-        help="Check to append a Rehabilitation Treatment Specification System plan after each case."
-    )
-    
-    st.markdown("---")
-    
     # Clear conversation button
     if st.button("🗑️ Clear Conversation", use_container_width=True):
         st.session_state.messages = []
@@ -189,6 +268,8 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
     is_transfer_initial = is_initial_assessment and any(keyword in normalized_input for keyword in transfer_keywords)
     rtss_keywords = ["rtss", "rehabilitation treatment specification", "treatment specification"]
     rtss_requested = any(keyword in normalized_input for keyword in rtss_keywords)
+    language_profile_keywords = ["language profile", "communication observations", "verbal expression profile"]
+    language_profile_requested = any(keyword in normalized_input for keyword in language_profile_keywords)
     
     # Create system prompt based on settings
     difficulty_map = {
@@ -262,6 +343,40 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     unsafe_allow_html=True
                 )
         
+        base_message = assistant_message
+
+        # Generate Language Profile section if requested
+        if st.session_state.get("language_profile_enabled", False) or language_profile_requested:
+            try:
+                with st.spinner("Drafting language profile..."):
+                    def update_language_profile(section_partial: str) -> None:
+                        sanitized_partial = strip_language_profile_heading(section_partial)
+                        live_assistant_placeholder.markdown(
+                            render_assistant_message(
+                                f"{base_message}\n\n{LANGUAGE_PROFILE_HEADING}\n{sanitized_partial}"
+                            ),
+                            unsafe_allow_html=True
+                        )
+                    language_profile_section = generate_language_profile_section(
+                        case_text=base_message,
+                        user_prompt=pending_input,
+                        model=model,
+                        temperature=temperature,
+                        on_chunk=update_language_profile
+                    )
+                language_profile_section = strip_language_profile_heading(language_profile_section)
+                if language_profile_section:
+                    assistant_message = (
+                        f"{base_message}\n\n{LANGUAGE_PROFILE_HEADING}\n{language_profile_section}"
+                    )
+                    live_assistant_placeholder.markdown(
+                        render_assistant_message(assistant_message),
+                        unsafe_allow_html=True
+                    )
+                    base_message = assistant_message
+            except Exception as lp_error:
+                st.warning(f"Language profile agent skipped due to error: {lp_error}")
+
         # Generate RTSS section with dedicated agent and append to response
         if st.session_state.get("rtss_enabled", False) or rtss_requested:
             try:
@@ -283,7 +398,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     )
                 if rtss_section:
                     assistant_message = (
-                        f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{rtss_section}"
+                        f"{base_message}\n\n\n{rtss_section}"
                     )
                     live_assistant_placeholder.markdown(
                         render_assistant_message(assistant_message),
@@ -304,7 +419,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #6B7280; padding: 1rem;'>
-        <p>Powered by OpenAI • Built for SLP Educators</p>
+        <p>An AI-powered educational case study generator for neurogenic communication disorders</p>
     </div>
     """,
     unsafe_allow_html=True
