@@ -19,7 +19,6 @@ def strip_language_profile_heading(text: str) -> str:
             break
     return "\n".join(lines).strip()
 
-
 # Dedicated Language Profile agent helper
 def generate_language_profile_section(
     case_text: str,
