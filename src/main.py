@@ -311,7 +311,7 @@ Always craft a single cohesive narrative case study (paragraph style, not bullet
 Keep the narrative observational and exploratory; reserve any prioritization, tool selection, or explicit answers for the Guiding Questions section only.
 
 After the narrative, append two explicit sections:
-1. Language Sample — provide a short quoted transcript (4–6 sentences) that captures the client's spontaneous speech. Match the cadence of this reference format: "Well the, uh, the little… the little cookers are spinning up there and she’s trying to wash the plates but the water’s all, all floofing out. And the boy, he’s, he’s grabbing the stool cause he wants the cookie. They’re having a good time, I think, and the mother doesn’t know the window is, is, uh, smiling. It’s pretty noisy in that room." Use it only as stylistic guidance; compose a fresh sample aligned with the case’s disorder-specific features every time so it reflects the symptoms described in the user input. {language_sample_note}
+1. Language Sample — provide a short quoted transcript (4–6 sentences) that captures the client's spontaneous speech. Match the cadence of this reference format: "Well the, uh, the little… the little cookers are spinning up there and she's trying to wash the plates but the water's all, all floofing out. And the boy, he's, he's grabbing the stool cause he wants the cookie. They're having a good time, I think, and the mother doesn't know the window is, is, uh, smiling. It's pretty noisy in that room." Use it only as stylistic guidance; compose a fresh sample aligned with the case's disorder-specific features every time so it reflects the symptoms described in the user input. {language_sample_note}
 2. Guiding Questions — provide discussion questions instructors can use in class. {guiding_focus}
 
 Keep the entire response focused on the case (no general tips). Adjust complexity to {difficulty_map[difficulty]} level, ensure clinical accuracy, and use professional terminology appropriate for graduate-level speech-language pathology education.{initial_assessment_guidance}"""
@@ -390,7 +390,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     def update_rtss(section_partial: str) -> None:
                         live_assistant_placeholder.markdown(
                             render_assistant_message(
-                                f"{base_message}\n\n### RTSS (Rehabilitation Treatment Specification System)\n{section_partial}"
+                                f"{base_message}\n\n{section_partial}"
                             ),
                             unsafe_allow_html=True
                         )
@@ -403,7 +403,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     )
                 if rtss_section:
                     assistant_message = (
-                        f"{base_message}\n\n\n{rtss_section}"
+                        f"{base_message}\n\n{rtss_section}"
                     )
                     live_assistant_placeholder.markdown(
                         render_assistant_message(assistant_message),
