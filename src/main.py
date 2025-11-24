@@ -143,6 +143,7 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 10px;
         margin-bottom: 1rem;
+        color: #1F2937;
     }
     .user-message {
         background-color: #EEF2FF;
@@ -151,6 +152,13 @@ st.markdown("""
     .assistant-message {
         background-color: #F9FAFB;
         border-left: 4px solid #10B981;
+    }
+    /* Force dark text in chat messages regardless of theme */
+    .chat-message * {
+        color: #1F2937 !important;
+    }
+    .chat-message strong {
+        color: #111827 !important;
     }
 </style>
 """, unsafe_allow_html=True)
