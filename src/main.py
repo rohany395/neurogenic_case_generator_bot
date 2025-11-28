@@ -1,6 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import openai
 from datetime import datetime
+import json
+import html
 
 LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
 LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
@@ -144,6 +147,7 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 1rem;
         color: #1F2937;
+        position: relative;
     }
     .user-message {
         background-color: #EEF2FF;
@@ -168,7 +172,52 @@ def render_user_message(content: str) -> str:
     return f'<div class="chat-message user-message"><strong>👤 You:</strong><br>{content}</div>'
 
 def render_assistant_message(content: str) -> str:
+    """Render assistant message HTML."""
     return f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>'
+
+def render_copy_button(content: str):
+    """Render a functional copy button using st.components.html()."""
+    # Use json.dumps for JavaScript string literal, then html.escape for HTML attribute context
+    js_string = json.dumps(content)
+    escaped_js_string = html.escape(js_string)
+    html_code = f'''
+    <button id="copyBtn" style="
+        background-color: #E5E7EB;
+        border: none;
+        border-radius: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #374151;
+        transition: background-color 0.2s;
+    " onmouseover="this.style.backgroundColor='#D1D5DB'" 
+       onmouseout="this.style.backgroundColor='#E5E7EB'"
+       onclick="
+        var text = {escaped_js_string};
+        var btn = document.getElementById('copyBtn');
+        function showCopied() {{
+            btn.textContent = '✓ Copied!';
+            setTimeout(function() {{ btn.textContent = '📋 Copy'; }}, 2000);
+        }}
+        navigator.clipboard.writeText(text).then(showCopied).catch(function(err) {{
+            // Fallback for older browsers
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {{
+                document.execCommand('copy');
+                showCopied();
+            }} catch(e) {{
+                console.error('Copy failed:', e);
+            }}
+            document.body.removeChild(textarea);
+        }});
+    ">📋 Copy</button>
+    '''
+    components.html(html_code, height=35)
 
 # Get API key from secrets
 try:
@@ -264,6 +313,7 @@ with conversation_container:
             st.markdown(render_user_message(message["content"]), unsafe_allow_html=True)
         else:
             st.markdown(render_assistant_message(message["content"]), unsafe_allow_html=True)
+            render_copy_button(message["content"])
     live_user_placeholder = st.empty()
     live_assistant_placeholder = st.empty()
 
