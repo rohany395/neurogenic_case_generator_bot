@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import openai
 from datetime import datetime
 import json
+import html
 
 LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
 LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
@@ -181,7 +182,9 @@ def render_assistant_message(content: str) -> str:
 
 def render_copy_button(content: str):
     """Render a functional copy button using st.components.html()."""
-    escaped_content = json.dumps(content)
+    # Use json.dumps for JavaScript string literal, then html.escape for HTML attribute context
+    js_string = json.dumps(content)
+    escaped_js_string = html.escape(js_string)
     html_code = f'''
     <button id="copyBtn" style="
         background-color: #E5E7EB;
@@ -195,11 +198,13 @@ def render_copy_button(content: str):
     " onmouseover="this.style.backgroundColor='#D1D5DB'" 
        onmouseout="this.style.backgroundColor='#E5E7EB'"
        onclick="
-        var text = {escaped_content};
-        navigator.clipboard.writeText(text).then(function() {{
-            document.getElementById('copyBtn').textContent = '✓ Copied!';
-            setTimeout(function() {{ document.getElementById('copyBtn').textContent = '📋 Copy'; }}, 2000);
-        }}).catch(function(err) {{
+        var text = {escaped_js_string};
+        var btn = document.getElementById('copyBtn');
+        function showCopied() {{
+            btn.textContent = '✓ Copied!';
+            setTimeout(function() {{ btn.textContent = '📋 Copy'; }}, 2000);
+        }}
+        navigator.clipboard.writeText(text).then(showCopied).catch(function(err) {{
             // Fallback for older browsers
             var textarea = document.createElement('textarea');
             textarea.value = text;
@@ -209,8 +214,7 @@ def render_copy_button(content: str):
             textarea.select();
             try {{
                 document.execCommand('copy');
-                document.getElementById('copyBtn').textContent = '✓ Copied!';
-                setTimeout(function() {{ document.getElementById('copyBtn').textContent = '📋 Copy'; }}, 2000);
+                showCopied();
             }} catch(e) {{
                 console.error('Copy failed:', e);
             }}
