@@ -1,7 +1,7 @@
 import streamlit as st
 import openai
 from datetime import datetime
-import html
+import json
 
 LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
 LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
@@ -196,13 +196,14 @@ def render_assistant_message(content: str, include_copy_button: bool = True) -> 
         include_copy_button: Whether to include the copy button (default True)
     """
     if include_copy_button:
-        # Escape the content for safe embedding in JavaScript
-        escaped_content = html.escape(content).replace('\n', '\\n').replace('\r', '').replace("'", "\\'")
+        # Use JSON encoding for safe JavaScript embedding
+        escaped_content = json.dumps(content)
         copy_button = f'''<button class="copy-btn" onclick="
-            navigator.clipboard.writeText('{escaped_content}'.replace(/\\\\n/g, '\\n')).then(function() {{
-                this.textContent = '✓ Copied!';
-                setTimeout(function() {{ document.querySelectorAll('.copy-btn').forEach(function(btn) {{ if(btn.textContent === '✓ Copied!') btn.textContent = '📋 Copy'; }}); }}, 2000);
-            }}.bind(this)).catch(function(err) {{
+            var btn = this;
+            navigator.clipboard.writeText({escaped_content}).then(function() {{
+                btn.textContent = '✓ Copied!';
+                setTimeout(function() {{ btn.textContent = '📋 Copy'; }}, 2000);
+            }}).catch(function(err) {{
                 console.error('Failed to copy: ', err);
             }});
         ">📋 Copy</button>'''
