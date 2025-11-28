@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import openai
 from datetime import datetime
 import json
@@ -162,24 +163,10 @@ st.markdown("""
     .chat-message strong {
         color: #111827 !important;
     }
-    .copy-btn {
+    .copy-textarea {
         position: absolute;
-        top: 10px;
-        right: 10px;
-        background-color: #E5E7EB;
-        border: none;
-        border-radius: 5px;
-        padding: 5px 10px;
-        cursor: pointer;
-        font-size: 0.8rem;
-        color: #374151 !important;
-        transition: background-color 0.2s;
-    }
-    .copy-btn:hover {
-        background-color: #D1D5DB;
-    }
-    .copy-btn:active {
-        background-color: #9CA3AF;
+        left: -9999px;
+        top: 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -188,27 +175,50 @@ st.markdown("""
 def render_user_message(content: str) -> str:
     return f'<div class="chat-message user-message"><strong>👤 You:</strong><br>{content}</div>'
 
-def render_assistant_message(content: str, include_copy_button: bool = True) -> str:
-    """Render assistant message with optional copy button.
-    
-    Args:
-        content: The message content to display
-        include_copy_button: Whether to include the copy button (default True)
-    """
-    if include_copy_button:
-        # Use JSON encoding for safe JavaScript embedding
-        escaped_content = json.dumps(content)
-        copy_button = f'''<button class="copy-btn" onclick="
-            var btn = this;
-            navigator.clipboard.writeText({escaped_content}).then(function() {{
-                btn.textContent = '✓ Copied!';
-                setTimeout(function() {{ btn.textContent = '📋 Copy'; }}, 2000);
-            }}).catch(function(err) {{
-                console.error('Failed to copy: ', err);
-            }});
-        ">📋 Copy</button>'''
-        return f'<div class="chat-message assistant-message">{copy_button}<strong>🤖 Assistant:</strong><br>{content}</div>'
+def render_assistant_message(content: str) -> str:
+    """Render assistant message HTML."""
     return f'<div class="chat-message assistant-message"><strong>🤖 Assistant:</strong><br>{content}</div>'
+
+def render_copy_button(content: str):
+    """Render a functional copy button using st.components.html()."""
+    escaped_content = json.dumps(content)
+    html_code = f'''
+    <button id="copyBtn" style="
+        background-color: #E5E7EB;
+        border: none;
+        border-radius: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #374151;
+        transition: background-color 0.2s;
+    " onmouseover="this.style.backgroundColor='#D1D5DB'" 
+       onmouseout="this.style.backgroundColor='#E5E7EB'"
+       onclick="
+        var text = {escaped_content};
+        navigator.clipboard.writeText(text).then(function() {{
+            document.getElementById('copyBtn').textContent = '✓ Copied!';
+            setTimeout(function() {{ document.getElementById('copyBtn').textContent = '📋 Copy'; }}, 2000);
+        }}).catch(function(err) {{
+            // Fallback for older browsers
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {{
+                document.execCommand('copy');
+                document.getElementById('copyBtn').textContent = '✓ Copied!';
+                setTimeout(function() {{ document.getElementById('copyBtn').textContent = '📋 Copy'; }}, 2000);
+            }} catch(e) {{
+                console.error('Copy failed:', e);
+            }}
+            document.body.removeChild(textarea);
+        }});
+    ">📋 Copy</button>
+    '''
+    components.html(html_code, height=35)
 
 # Get API key from secrets
 try:
@@ -304,6 +314,7 @@ with conversation_container:
             st.markdown(render_user_message(message["content"]), unsafe_allow_html=True)
         else:
             st.markdown(render_assistant_message(message["content"]), unsafe_allow_html=True)
+            render_copy_button(message["content"])
     live_user_placeholder = st.empty()
     live_assistant_placeholder = st.empty()
 
@@ -392,7 +403,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     continue
                 assistant_message += delta_content
                 live_assistant_placeholder.markdown(
-                    render_assistant_message(assistant_message, include_copy_button=False),
+                    render_assistant_message(assistant_message),
                     unsafe_allow_html=True
                 )
         
@@ -406,8 +417,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                         sanitized_partial = strip_language_profile_heading(section_partial)
                         live_assistant_placeholder.markdown(
                             render_assistant_message(
-                                f"{base_message}\n\n{LANGUAGE_PROFILE_HEADING}\n{sanitized_partial}",
-                                include_copy_button=False
+                                f"{base_message}\n\n{LANGUAGE_PROFILE_HEADING}\n{sanitized_partial}"
                             ),
                             unsafe_allow_html=True
                         )
@@ -424,7 +434,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                         f"{base_message}\n\n{LANGUAGE_PROFILE_HEADING}\n{language_profile_section}"
                     )
                     live_assistant_placeholder.markdown(
-                        render_assistant_message(assistant_message, include_copy_button=False),
+                        render_assistant_message(assistant_message),
                         unsafe_allow_html=True
                     )
                     base_message = assistant_message
@@ -439,8 +449,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     def update_rtss(section_partial: str) -> None:
                         live_assistant_placeholder.markdown(
                             render_assistant_message(
-                                f"{base_message}\n\n{section_partial}",
-                                include_copy_button=False
+                                f"{base_message}\n\n{section_partial}"
                             ),
                             unsafe_allow_html=True
                         )
@@ -456,7 +465,7 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                         f"{base_message}\n\n{rtss_section}"
                     )
                     live_assistant_placeholder.markdown(
-                        render_assistant_message(assistant_message, include_copy_button=False),
+                        render_assistant_message(assistant_message),
                         unsafe_allow_html=True
                     )
             except Exception as rtss_error:
