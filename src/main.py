@@ -164,11 +164,6 @@ st.markdown("""
     .chat-message strong {
         color: #111827 !important;
     }
-    .copy-textarea {
-        position: absolute;
-        left: -9999px;
-        top: 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
