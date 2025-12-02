@@ -1,12 +1,76 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import openai
+from anthropic import Anthropic
 from datetime import datetime
+from typing import Optional
 import json
 import html
 
 LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
 LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
+MODEL_OPTIONS = {
+    "OpenAI GPT-4o": {"provider": "openai", "id": "gpt-4o"},
+    "Claude 3.5 Sonnet": {"provider": "anthropic", "id": "claude-3-5-sonnet-20241022"},
+}
+
+
+def get_model_config(label: str) -> dict:
+    return MODEL_OPTIONS[label]
+
+
+def convert_messages_for_anthropic(messages):
+    system_parts = []
+    convo_messages = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "system":
+            if content:
+                system_parts.append(content)
+            continue
+        if role in ("user", "assistant"):
+            convo_messages.append({"role": role, "content": content})
+    system_prompt = "\n\n".join(system_parts)
+    return system_prompt, convo_messages
+
+
+def stream_chat_chunks(model_config: dict, messages: list, temperature: float, max_tokens: int, anthropic_client: Optional[Anthropic]):
+    provider = model_config["provider"]
+    model_id = model_config["id"]
+    clamped_temp = min(max(temperature, 0.0), 1.0)
+    if provider == "openai":
+        response_stream = openai.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            temperature=clamped_temp,
+            max_tokens=max_tokens,
+            stream=True
+        )
+        for chunk in response_stream:
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
+            delta_content = getattr(delta, "content", None)
+            if delta_content is None and isinstance(delta, dict):
+                delta_content = delta.get("content")
+            if not delta_content:
+                continue
+            yield delta_content
+        return
+    if not anthropic_client:
+        raise RuntimeError("Claude model selected but Anthropic API key is missing.")
+    system_prompt, anthropic_messages = convert_messages_for_anthropic(messages)
+    with anthropic_client.messages.stream(
+        model=model_id,
+        max_tokens=max_tokens,
+        temperature=clamped_temp,
+        system=system_prompt or "",
+        messages=anthropic_messages,
+    ) as stream:
+        for event in stream:
+            if event.type == "content_block_delta" and getattr(event.delta, "type", "") == "text_delta":
+                yield event.delta.text
 def strip_language_profile_heading(text: str) -> str:
     if not text:
         return ""
@@ -26,8 +90,9 @@ def strip_language_profile_heading(text: str) -> str:
 def generate_language_profile_section(
     case_text: str,
     user_prompt: str,
-    model: str,
+    model_config: dict,
     temperature: float,
+    anthropic_client: Optional[Anthropic],
     on_chunk=None,
 ) -> str:
     profile_system_prompt = (
@@ -52,26 +117,18 @@ def generate_language_profile_section(
         "Moderate impairment in confrontation naming with semantic substitutions and occasional perseveration."
     )
     profile_user_prompt = f"""User request: {user_prompt}\n\nCase narrative: {case_text}\n\nProduce a Language Profile / Communication Observations section modeled on the exemplar below. Match the structure (intro plus subsections such as Verbal Expression, Auditory Comprehension, Repetition, Naming, etc.), but tailor every content line to the provided case details. Keep it concise, clinically rich, and coherent with the narrative.\n\nExemplar:\n{exemplar}"""
-    response_stream = openai.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": profile_system_prompt},
-            {"role": "user", "content": profile_user_prompt}
-        ],
-        temperature=min(max(temperature, 0.0), 1.0),
-        max_tokens=800,
-        stream=True
-    )
+    messages = [
+        {"role": "system", "content": profile_system_prompt},
+        {"role": "user", "content": profile_user_prompt}
+    ]
     profile_text = ""
-    for chunk in response_stream:
-        delta = chunk.choices[0].delta
-        if not delta:
-            continue
-        delta_content = getattr(delta, "content", None)
-        if delta_content is None and isinstance(delta, dict):
-            delta_content = delta.get("content")
-        if not delta_content:
-            continue
+    for delta_content in stream_chat_chunks(
+        model_config=model_config,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=800,
+        anthropic_client=anthropic_client,
+    ):
         profile_text += delta_content
         if on_chunk:
             on_chunk(profile_text)
@@ -81,8 +138,9 @@ def generate_language_profile_section(
 def generate_rtss_section(
     case_text: str,
     user_prompt: str,
-    model: str,
+    model_config: dict,
     temperature: float,
+    anthropic_client: Optional[Anthropic],
     on_chunk=None,
 ) -> str:
     rtss_system_prompt = (
@@ -92,26 +150,18 @@ def generate_rtss_section(
         "provided case details."
     )
     rtss_user_prompt = f"""User request: {user_prompt}\n\nCase narrative: {case_text}\n\nCreate an RTSS section that includes: \n- Target (participation, impairment, or contextual focus) tied to the case goals.\n- Ingredients (specific clinician actions/techniques) with enough detail for another SLP to reproduce.\n- Mechanisms of action explaining why those ingredients are expected to work.\n- Dosage/parameters (session length, frequency, cues, materials).\n- Expected short-term markers of progress.\nFormat as concise markdown with clear subheadings. Do not contradict the narrative; infer only what is supported by it."""
-    response_stream = openai.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": rtss_system_prompt},
-            {"role": "user", "content": rtss_user_prompt}
-        ],
-        temperature=min(max(temperature, 0.0), 1.0),
-        max_tokens=800,
-        stream=True
-    )
+    messages = [
+        {"role": "system", "content": rtss_system_prompt},
+        {"role": "user", "content": rtss_user_prompt}
+    ]
     section_text = ""
-    for chunk in response_stream:
-        delta = chunk.choices[0].delta
-        if not delta:
-            continue
-        delta_content = getattr(delta, "content", None)
-        if delta_content is None and isinstance(delta, dict):
-            delta_content = delta.get("content")
-        if not delta_content:
-            continue
+    for delta_content in stream_chat_chunks(
+        model_config=model_config,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=800,
+        anthropic_client=anthropic_client,
+    ):
         section_text += delta_content
         if on_chunk:
             on_chunk(section_text)
@@ -219,12 +269,12 @@ def render_copy_button(content: str):
     '''
     components.html(html_code, height=35)
 
-# Get API key from secrets
-try:
-    openai.api_key = st.secrets["OPENAI_API_KEY"]
-except KeyError:
-    st.error("⚠️ OpenAI API key not found in secrets. Please add it to .streamlit/secrets.toml")
-    st.stop()
+# Get API keys from secrets (keys validated later based on provider selection)
+openai_api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else None
+if openai_api_key:
+    openai.api_key = openai_api_key
+anthropic_api_key = st.secrets["ANTHROPIC_API_KEY"] if "ANTHROPIC_API_KEY" in st.secrets else None
+anthropic_client: Optional[Anthropic] = Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
 # Initialize session state
 if 'messages' not in st.session_state:
@@ -270,11 +320,12 @@ with st.sidebar:
     include_assessment = True
     
     # Model selection
-    model = st.selectbox(
+    model_labels = list(MODEL_OPTIONS.keys())
+    selected_model_label = st.selectbox(
         "Model",
-        ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+        model_labels,
         index=0,
-        help="Select the OpenAI model to use"
+        help="Choose between the default OpenAI model and the integrated Claude model"
     )
     
     # Temperature
@@ -292,6 +343,14 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
+
+model_config = get_model_config(selected_model_label)
+if model_config["provider"] == "openai" and not openai_api_key:
+    st.error("⚠️ OpenAI model selected but OPENAI_API_KEY is not configured in .streamlit/secrets.toml")
+    st.stop()
+if model_config["provider"] == "anthropic" and not anthropic_client:
+    st.error("⚠️ Claude model selected but ANTHROPIC_API_KEY is not configured in .streamlit/secrets.toml")
+    st.stop()
 
 # Main content
 st.markdown('<div class="main-header">📚 Clinical Case Study Generator</div>', unsafe_allow_html=True)
@@ -380,26 +439,17 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
         for m in st.session_state.messages
     ]
     
-    # Stream OpenAI API response so content appears as it arrives
+    # Stream model response so content appears as it arrives
     try:
         assistant_message = ""
         with st.spinner("Generating case study..."):
-            response_stream = openai.chat.completions.create(
-                model=model,
+            for delta_content in stream_chat_chunks(
+                model_config=model_config,
                 messages=api_messages,
-                max_tokens=2000,
                 temperature=temperature,
-                stream=True
-            )
-            for chunk in response_stream:
-                delta = chunk.choices[0].delta
-                if not delta:
-                    continue
-                delta_content = getattr(delta, "content", None)
-                if delta_content is None and isinstance(delta, dict):
-                    delta_content = delta.get("content")
-                if not delta_content:
-                    continue
+                max_tokens=2000,
+                anthropic_client=anthropic_client,
+            ):
                 assistant_message += delta_content
                 live_assistant_placeholder.markdown(
                     render_assistant_message(assistant_message),
@@ -423,8 +473,9 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     language_profile_section = generate_language_profile_section(
                         case_text=base_message,
                         user_prompt=pending_input,
-                        model=model,
+                        model_config=model_config,
                         temperature=temperature,
+                        anthropic_client=anthropic_client,
                         on_chunk=update_language_profile
                     )
                 language_profile_section = strip_language_profile_heading(language_profile_section)
@@ -455,8 +506,9 @@ Keep the entire response focused on the case (no general tips). Adjust complexit
                     rtss_section = generate_rtss_section(
                         case_text=base_message,
                         user_prompt=pending_input,
-                        model=model,
+                        model_config=model_config,
                         temperature=temperature,
+                        anthropic_client=anthropic_client,
                         on_chunk=update_rtss
                     )
                 if rtss_section:
