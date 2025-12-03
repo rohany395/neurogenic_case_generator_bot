@@ -134,7 +134,7 @@ def ingest_exemplars_to_vector_db(openai_key: str) -> int:
 
 MODEL_OPTIONS = {
     "OpenAI GPT-4o": {"provider": "openai", "id": "gpt-4o"},
-    "Claude 3.5 Sonnet": {"provider": "anthropic", "id": "claude-3-5-sonnet-20241022"},
+    "Claude 3.5 Sonnet": {"provider": "anthropic", "id": "claude-sonnet-4-20250514"},
 }
 
 
