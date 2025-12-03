@@ -6,9 +6,132 @@ from datetime import datetime
 from typing import Optional
 import json
 import html
+import os
+import glob
+import random
+
+# Fix for SQLite version issue with ChromaDB
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass  # pysqlite3 not available, use system sqlite3
+
+# RAG imports
+from langchain_community.document_loaders import TextLoader
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from docx import Document as DocxDocument
 
 LANGUAGE_PROFILE_HEADING_TEXT = "Language Profile / Communication Observations"
 LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
+
+# RAG Configuration
+REF_DOCUMENTS_DIR = "ref_documents"
+CHROMA_DB_DIR = "data/chroma_db"
+
+
+def load_docx_content(file_path: str) -> str:
+    """Extract text content from a .docx file."""
+    try:
+        doc = DocxDocument(file_path)
+        return "\n".join(para.text for para in doc.paragraphs if para.text.strip())
+    except Exception:
+        return ""
+
+
+def get_best_matching_exemplar(user_input: str, openai_key: Optional[str]) -> tuple[str, str]:
+    """
+    Load a reference case from ref_documents.
+    Uses semantic search if vector DB exists, otherwise falls back to filename matching.
+    Returns (content, filename).
+    """
+    if not os.path.exists(REF_DOCUMENTS_DIR):
+        return "", ""
+    
+    files = glob.glob(os.path.join(REF_DOCUMENTS_DIR, "*.docx"))
+    if not files:
+        return "", ""
+    
+    # Try semantic search if we have OpenAI key and vector DB
+    if openai_key and os.path.exists(CHROMA_DB_DIR):
+        try:
+            embedding_function = OpenAIEmbeddings(api_key=openai_key)
+            db = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embedding_function)
+            results = db.similarity_search(user_input, k=1)
+            if results:
+                best_doc = results[0]
+                source = best_doc.metadata.get("source", "Unknown")
+                return best_doc.page_content, os.path.basename(source)
+        except Exception:
+            pass  # Fall back to filename matching
+    
+    # Fallback: filename keyword matching
+    best_file = None
+    max_matches = 0
+    normalized_input = user_input.lower()
+    
+    random.shuffle(files)
+    
+    for file_path in files:
+        filename = os.path.basename(file_path)
+        name_stem = os.path.splitext(filename)[0].lower()
+        tokens = name_stem.replace('_', ' ').replace('-', ' ').split()
+        matches = sum(1 for token in tokens if token in normalized_input and len(token) > 2)
+        
+        if matches > max_matches:
+            max_matches = matches
+            best_file = file_path
+            
+    selected_file = best_file if best_file else files[0]
+    
+    content = load_docx_content(selected_file)
+    if content:
+        return content, os.path.basename(selected_file)
+    return "", ""
+
+
+def ingest_exemplars_to_vector_db(openai_key: str) -> int:
+    """
+    Reads all .docx files in ref_documents, extracts text,
+    and stores them in a local Vector DB.
+    Returns number of documents ingested.
+    """
+    if not os.path.exists(REF_DOCUMENTS_DIR):
+        return 0
+
+    files = glob.glob(os.path.join(REF_DOCUMENTS_DIR, "*.docx"))
+    if not files:
+        return 0
+
+    from langchain_core.documents import Document as LCDocument
+    documents = []
+    for file_path in files:
+        content = load_docx_content(file_path)
+        if content:
+            documents.append(LCDocument(page_content=content, metadata={"source": file_path}))
+
+    if not documents:
+        return 0
+
+    # Split text if cases are very long
+    text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+    docs = text_splitter.split_documents(documents)
+
+    # Create/Update Vector Store
+    embedding_function = OpenAIEmbeddings(api_key=openai_key)
+    
+    # This saves the DB locally to disk
+    Chroma.from_documents(
+        documents=docs, 
+        embedding=embedding_function, 
+        persist_directory=CHROMA_DB_DIR
+    )
+    return len(docs)
+
+
 MODEL_OPTIONS = {
     "OpenAI GPT-4o": {"provider": "openai", "id": "gpt-4o"},
     "Claude 3.5 Sonnet": {"provider": "anthropic", "id": "claude-3-5-sonnet-20241022"},
@@ -71,6 +194,7 @@ def stream_chat_chunks(model_config: dict, messages: list, temperature: float, m
         for event in stream:
             if event.type == "content_block_delta" and getattr(event.delta, "type", "") == "text_delta":
                 yield event.delta.text
+                
 def strip_language_profile_heading(text: str) -> str:
     if not text:
         return ""
@@ -393,6 +517,21 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
     language_profile_keywords = ["language profile", "communication observations", "verbal expression profile"]
     language_profile_requested = any(keyword in normalized_input for keyword in language_profile_keywords)
     
+    # Load a reference case if available, prioritizing semantic matches
+    reference_content, reference_name = get_best_matching_exemplar(pending_input, openai_api_key)
+    reference_instruction = ""
+    if reference_content:
+        reference_instruction = f"""
+### Reference Style Guide
+Below is an example of an ideal case study. Use it ONLY for structural and stylistic inspiration (tone, depth of detail, phrasing). 
+DO NOT copy the patient details, diagnosis, or specific scenario from this reference. 
+Apply this high-quality clinical writing style to the specific case requested by the user.
+
+<reference_exemplar>
+{reference_content}
+</reference_exemplar>
+"""
+    
     # Create system prompt based on settings
     difficulty_map = {
         "Beginner (Undergraduate)": "beginner",
@@ -416,7 +555,7 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
             )
     
     system_prompt = f"""You are an expert clinical educator specializing in speech-language pathology. Your role is to help university instructors create high-quality, realistic case studies for their students.
-
+{reference_instruction}
 Always craft a single cohesive narrative case study (paragraph style, not bullet points) that weaves together (and do not pre-answer or give instructions for the guiding questions here):
 - Patient demographics and background
 - Detailed medical history and etiology

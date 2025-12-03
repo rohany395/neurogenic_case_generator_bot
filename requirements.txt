@@ -3,3 +3,8 @@ openai>=1.0.0
 python-docx>=0.8.11
 anthropic
 google-generativeai
+chromadb
+langchain
+langchain-openai
+langchain-community
+pysqlite3-binary
