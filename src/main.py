@@ -16,7 +16,7 @@ try:
     import sys
     sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 except ImportError:
-    pass  # pysqlite3 not available, use system sqlite3
+    pass  
 
 # RAG imports
 from langchain_community.document_loaders import TextLoader
@@ -55,7 +55,7 @@ def get_best_matching_exemplar(user_input: str, openai_key: Optional[str]) -> tu
     if not files:
         return "", ""
     
-    # Try semantic search if we have OpenAI key and vector DB
+    
     if openai_key and os.path.exists(CHROMA_DB_DIR):
         try:
             embedding_function = OpenAIEmbeddings(api_key=openai_key)
@@ -66,7 +66,7 @@ def get_best_matching_exemplar(user_input: str, openai_key: Optional[str]) -> tu
                 source = best_doc.metadata.get("source", "Unknown")
                 return best_doc.page_content, os.path.basename(source)
         except Exception:
-            pass  # Fall back to filename matching
+            pass  
     
     # Fallback: filename keyword matching
     best_file = None
