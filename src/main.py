@@ -32,6 +32,59 @@ LANGUAGE_PROFILE_HEADING = f"### {LANGUAGE_PROFILE_HEADING_TEXT}"
 REF_DOCUMENTS_DIR = "ref_documents"
 CHROMA_DB_DIR = "data/chroma_db"
 
+# Ethnicity options for randomization
+ETHNICITIES = [
+    "African American",
+    "Caucasian/White",
+    "Hispanic/Latino",
+    "Asian American",
+    "Native American",
+    "Pacific Islander",
+    "Middle Eastern",
+    "South Asian",
+    "East Asian",
+    "Southeast Asian",
+    "Caribbean",
+    "Mixed race/Multiracial",
+]
+
+NEW_CASE_KEYWORDS = [
+    "create", "generate", "make", "new case", "another case", "different case",
+    "case study", "case for", "demonstration of", "show me", "give me",
+    "broca", "wernicke", "aphasia", "dementia", "dysarthria", "apraxia",
+    "tbi", "traumatic brain", "stroke", "parkinsons", "parkinson's", "als",
+    "primary progressive", "right hemisphere", "cognitive-communication"
+]
+
+
+def is_new_case_request(user_input: str, messages: list) -> bool:
+    """Determine if this is a new case request or a follow-up question."""
+    normalized = user_input.lower()
+    
+    
+    if len(messages) <= 1:  
+        return True
+    
+    
+    for keyword in NEW_CASE_KEYWORDS:
+        if keyword in normalized:
+            return True
+    
+    
+    follow_up_patterns = [
+        "tell me more", "expand", "elaborate", "what about", "how would",
+        "can you explain", "why", "what if", "more detail", "clarify",
+        "regarding", "about the", "for this patient", "for this case",
+        "the patient", "this patient", "same patient", "same case"
+    ]
+    
+    for pattern in follow_up_patterns:
+        if pattern in normalized:
+            return False
+    
+    
+    return True
+
 
 def load_docx_content(file_path: str) -> str:
     """Extract text content from a .docx file."""
@@ -338,6 +391,54 @@ st.markdown("""
     .chat-message strong {
         color: #111827 !important;
     }
+    
+    /* Quick prompt tiles styling */
+    .quick-prompts-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        padding: 2rem 1rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .quick-prompt-tile {
+        background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+        border: 1px solid #C7D2FE;
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex: 1 1 calc(50% - 1rem);
+        min-width: 250px;
+        max-width: 400px;
+        text-align: left;
+    }
+    .quick-prompt-tile:hover {
+        background: linear-gradient(135deg, #E0E7FF 0%, #C7D2FE 100%);
+        border-color: #A5B4FC;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+    }
+    .quick-prompt-tile p {
+        margin: 0;
+        color: #3730A3 !important;
+        font-size: 0.95rem;
+        line-height: 1.4;
+    }
+    .quick-prompt-tile .tile-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .welcome-section {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #6B7280;
+    }
+    .welcome-section h3 {
+        color: #374151;
+        margin-bottom: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -408,24 +509,18 @@ if 'rtss_enabled' not in st.session_state:
 if 'language_profile_enabled' not in st.session_state:
     st.session_state.language_profile_enabled = False
 
-# Sidebar
+# Quick prompts data with icons
+QUICK_PROMPTS = [
+    {"text": "Create a moderate Broca's aphasia case for learning initial assessment"},
+    {"text": "Create a dementia case for treatment planning"},
+    {"text": "Demonstration of collaborative goal setting with conversation scripts"},
+    {"text": "Demonstration of motivational interviewing with conversation scripts"},
+    {"text": "Demonstration of a specific treatment technique with conversation scripts"},
+    {"text":"Create a case of flaccid dysarthria for treatment planning"}
+]
+
+# Sidebar (without quick prompts)
 with st.sidebar:
-    st.markdown("### 📖 Quick Prompts")
-    
-    quick_prompts = [
-        "create a moderate Broca's aphasia case for learning initial assessment",
-        "create a dementia case for treatment planning",
-        "Demonstration of collaborative goal setting with conversation scripts",
-        "Demonstration of motivational interviewing with conversation scripts",
-        "Demonstration of a specific treatment technique with conversation scripts"
-    ]
-    dropdown_options = ["Select a quick prompt…"] + quick_prompts
-    selected_prompt = st.selectbox("Choose a quick prompt", dropdown_options, index=0)
-    if st.button("Send Quick Prompt", use_container_width=True, disabled=selected_prompt == dropdown_options[0]):
-        st.session_state["pending_user_input"] = selected_prompt
-        st.rerun()
-    
-    st.markdown("---")
     st.markdown("### ➕ Additional Content")
     st.session_state.language_profile_enabled = st.checkbox(
         "Generate Language Profile section",
@@ -487,6 +582,30 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Show quick prompt tiles only when conversation is empty
+if not st.session_state.messages:
+    st.markdown("""
+    <div class="welcome-section">
+        <h3>👋 Welcome! Get started with a quick prompt:</h3>
+        <p>Select one of the options below or type your own request</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Create tile layout using columns
+    col1, col2 = st.columns(2)
+    
+    for idx, prompt_data in enumerate(QUICK_PROMPTS):
+        col = col1 if idx % 2 == 0 else col2
+        with col:
+            if st.button(
+                f"{prompt_data['text']}", 
+                key=f"quick_prompt_{idx}",
+                use_container_width=True,
+                type="secondary"
+            ):
+                st.session_state["pending_user_input"] = prompt_data["text"]
+                st.rerun()
+
 live_user_placeholder = None
 live_assistant_placeholder = None
 conversation_container = st.container()
@@ -516,6 +635,14 @@ if pending_input and live_user_placeholder and live_assistant_placeholder:
     rtss_requested = any(keyword in normalized_input for keyword in rtss_keywords)
     language_profile_keywords = ["language profile", "communication observations", "verbal expression profile"]
     language_profile_requested = any(keyword in normalized_input for keyword in language_profile_keywords)
+    
+    # Determine if this is a new case or follow-up, and randomize ethnicity for new cases
+    is_new_case = is_new_case_request(pending_input, st.session_state.messages)
+    if is_new_case:
+        selected_ethnicity = random.choice(ETHNICITIES)
+        ethnicity_instruction = f"\n\nIMPORTANT: For this case, make the patient {selected_ethnicity}. Incorporate culturally appropriate details naturally into the case narrative (name, family dynamics, cultural considerations for treatment, etc.) without stereotyping."
+    else:
+        ethnicity_instruction = ""
     
     # Load a reference case if available, prioritizing semantic matches
     reference_content, reference_name = get_best_matching_exemplar(pending_input, openai_api_key)
@@ -555,7 +682,7 @@ Apply this high-quality clinical writing style to the specific case requested by
             )
     
     system_prompt = f"""You are an expert clinical educator specializing in speech-language pathology. Your role is to help university instructors create high-quality, realistic case studies for their students.
-{reference_instruction}
+{reference_instruction}{ethnicity_instruction}
 Always craft a single cohesive narrative case study (paragraph style, not bullet points) that weaves together (and do not pre-answer or give instructions for the guiding questions here):
 - Patient demographics and background
 - Detailed medical history and etiology
