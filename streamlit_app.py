@@ -1,4 +1,3 @@
-# Fix for SQLite version issue with ChromaDB - must be before any chromadb import
 try:
     __import__('pysqlite3')
     import sys
@@ -8,7 +7,5 @@ except ImportError:
 
 import streamlit as st
 
-
 pg=st.navigation([st.Page("./src/main.py",title="Neurogenic Case Generator")])
-st.set_page_config(page_title="Case generator bot",)
 pg.run()
