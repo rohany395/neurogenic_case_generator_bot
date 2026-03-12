@@ -39,13 +39,6 @@ NEW_CASE_KEYWORDS: list[str] = [
     "primary progressive", "right hemisphere", "cognitive-communication",
 ]
 
-FOLLOW_UP_PATTERNS: list[str] = [
-    "tell me more", "expand", "elaborate", "what about", "how would",
-    "can you explain", "why", "what if", "more detail", "clarify",
-    "regarding", "about the", "for this patient", "for this case",
-    "the patient", "this patient", "same patient", "same case",
-]
-
 TRANSFER_KEYWORDS: list[str] = [
     "transfer", "new setting", "transition", "new facility", "new clinic", "discharge to",
 ]

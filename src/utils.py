@@ -4,7 +4,6 @@ Stateless helper functions used across the application.
 
 from config import (
     NEW_CASE_KEYWORDS,
-    FOLLOW_UP_PATTERNS,
     LANGUAGE_PROFILE_HEADING_TEXT,
 )
 
@@ -21,11 +20,7 @@ def is_new_case_request(user_input: str, messages: list) -> bool:
         if keyword in normalized:
             return True
 
-    for pattern in FOLLOW_UP_PATTERNS:
-        if pattern in normalized:
-            return False
-
-    return True
+    return False
 
 
 def strip_language_profile_heading(text: str) -> str:
